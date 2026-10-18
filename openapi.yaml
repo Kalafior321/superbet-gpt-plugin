@@ -9,6 +9,8 @@ paths:
   /api/kursy:
     get:
       summary: Pobierz listę meczów i kursy główne 1X2
+      security:
+        - ApiKeyAuth: []
       operationId: pobierzListeMeczow
       parameters:
         - name: szukaj
@@ -29,6 +31,8 @@ paths:
   /api/mecz-detale:
     get:
       summary: Pobierz wszystkie zaawansowane rynki dla wybranego meczu
+      security:
+        - ApiKeyAuth: []
       operationId: pobierzWszystkieRynkiMeczu
       parameters:
         - name: mecz_id
@@ -40,3 +44,10 @@ paths:
       responses:
         '200':
           description: Pełne zestawienie rynków i kursów.
+components:
+  schemas: {}
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
