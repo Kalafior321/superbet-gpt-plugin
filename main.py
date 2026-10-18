@@ -30,13 +30,16 @@ API_URL = "https://superbet.pl"
 SPORTS_CONFIG = {"1": "Pilka Nozna", "2": "Tenis", "3": "Koszykowka", "4": "Hokej na Lodzie"}
 STATUS_FILTERS = ["not_started", "live"]
 GLOBAL_EVENTS_CACHE: List[Dict] = []
-CACHE_METADATA = {"last_update": "Nigdy", "status": "Inicjalizacja", "total_events": 0}
+CACHE_METADATA = {"last_update": "Nigdy", "status": "Inicjalizacja", "total_events": 0, "last_attempt": None, "errors": [], "successful_requests": 0}
 
 def wykonaj_kompletny_scraping():
     """Pobiera mecze oraz wszystkie rynki zakładów bezpośrednio z API Superbet."""
     global GLOBAL_EVENTS_CACHE
     nagromadzone_mecze = []
+    bledy = []
+    udane_zapytania = 0
     timestamp_pobrania = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    CACHE_METADATA["last_attempt"] = timestamp_pobrania
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Accept": "application/json, text/plain, */*",
@@ -49,7 +52,13 @@ def wykonaj_kompletny_scraping():
             try:
                 response = requests.get(API_URL, params=params, headers=headers, timeout=20)
                 response.raise_for_status()
-                events = response.json().get("data", [])
+                if "json" not in response.headers.get("Content-Type", "").lower():
+                    raise ValueError("Źródło zwróciło treść inną niż JSON")
+                payload = response.json()
+                if not isinstance(payload, dict) or not isinstance(payload.get("data"), list):
+                    raise ValueError("Nieprawidłowy format: wymagane data jako lista")
+                events = payload["data"]
+                udane_zapytania += 1
                 for event in events:
                     match_name = event.get("matchName", "Nieznany")
                     league_name = event.get("leagueName", "Brak danych")
@@ -79,12 +88,29 @@ def wykonaj_kompletny_scraping():
                         "liga": league_name, "mecz": match_name, "data_meczu": match_date,
                         "kursy_glowne_1X2": kursy_glowne, "pelna_oferta_rynkowa": wszystkie_rynki
                     })
-            except Exception:
+            except Exception as exc:
+                blad = {"sport_id": sport_id, "tryb": status, "error_type": type(exc).__name__}
+                if isinstance(exc, ValueError):
+                    blad["message"] = "Nieprawidłowy format odpowiedzi źródła"
+                elif isinstance(exc, requests.HTTPError):
+                    blad["http_status"] = exc.response.status_code if exc.response is not None else None
+                bledy.append(blad)
+                print(f"[KOLEKTOR] {blad}", flush=True)
                 continue
+    CACHE_METADATA["errors"] = bledy
+    CACHE_METADATA["successful_requests"] = udane_zapytania
+    if bledy:
+        CACHE_METADATA["status"] = "Częściowy błąd" if udane_zapytania else "Błąd źródła"
+    elif not nagromadzone_mecze:
+        CACHE_METADATA["status"] = "Brak wydarzeń"
+    if udane_zapytania == len(SPORTS_CONFIG) * len(STATUS_FILTERS) and not nagromadzone_mecze:
+        GLOBAL_EVENTS_CACHE = []
+        CACHE_METADATA["last_update"] = timestamp_pobrania
+        CACHE_METADATA["total_events"] = 0
     if nagromadzone_mecze:
         GLOBAL_EVENTS_CACHE = nagromadzone_mecze
         CACHE_METADATA["last_update"] = timestamp_pobrania
-        CACHE_METADATA["status"] = "Aktywny"
+        CACHE_METADATA["status"] = "Częściowy błąd" if bledy else "Aktywny"
         CACHE_METADATA["total_events"] = len(nagromadzone_mecze)
         print(f"[{timestamp_pobrania}] Cache zaktualizowany. Zindeksowano {len(nagromadzone_mecze)} meczów.")
 
