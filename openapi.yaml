@@ -4,7 +4,7 @@ info:
   description: Wtyczka do sprawdzania pełnej oferty kursowej i wszystkich podrynków z Superbet. Aktualizowana o 10:00 i 16:00.
   version: 1.0.0
 servers:
-  - url: https://onrender.com
+  - url: https://superbet-gpt-plugin.onrender.com
 paths:
   /api/kursy:
     get:
