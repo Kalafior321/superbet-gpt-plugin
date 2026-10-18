@@ -1,0 +1,42 @@
+openapi: 3.1.0
+info:
+  title: Superbet Scheduled Multi-Market API
+  description: Wtyczka do sprawdzania pełnej oferty kursowej i wszystkich podrynków z Superbet. Aktualizowana o 10:00 i 16:00.
+  version: 1.0.0
+servers:
+  - url: https://onrender.com
+paths:
+  /api/kursy:
+    get:
+      summary: Pobierz listę meczów i kursy główne 1X2
+      operationId: pobierzListeMeczow
+      parameters:
+        - name: szukaj
+          in: query
+          required: false
+          description: Nazwa szukanego zespołu lub ligi.
+          schema:
+            type: string
+        - name: dyscyplina
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: ["Pilka Nozna", "Tenis", "Koszykowka", "Hokej na Lodzie"]
+      responses:
+        '200':
+          description: Sukces. Zwraca listę podstawową.
+  /api/mecz-detale:
+    get:
+      summary: Pobierz wszystkie zaawansowane rynki dla wybranego meczu
+      operationId: pobierzWszystkieRynkiMeczu
+      parameters:
+        - name: mecz_id
+          in: query
+          required: true
+          description: Identyfikator meczu pobrany z endpointu /api/kursy.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Pełne zestawienie rynków i kursów.
