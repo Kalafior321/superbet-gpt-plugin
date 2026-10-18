@@ -1,9 +1,10 @@
 import os
+import secrets
 import threading
 import time
 from datetime import datetime
 from typing import Optional, List, Dict
-from fastapi import FastAPI, Query, HTTPException
+from fastapi import FastAPI, Query, HTTPException, Header, Depends
 from fastapi.middleware.cors import CORSMiddleware
 import requests
 
@@ -18,6 +19,13 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+SECRET_API_KEY = os.environ.get("SECRET_API_KEY", "")
+
+def weryfikuj_klucz(x_api_key: Optional[str] = Header(None)):
+    if not SECRET_API_KEY or not x_api_key or not secrets.compare_digest(x_api_key, SECRET_API_KEY):
+        raise HTTPException(status_code=401, detail="Brak autoryzacji. Nieprawidłowy klucz API.")
+    return x_api_key
+
 API_URL = "https://superbet.pl"
 SPORTS_CONFIG = {"1": "Pilka Nozna", "2": "Tenis", "3": "Koszykowka", "4": "Hokej na Lodzie"}
 STATUS_FILTERS = ["not_started", "live"]
@@ -102,7 +110,8 @@ def startup_event():
 @app.get("/api/kursy")
 def pobierz_liste_meczow(
     szukaj: Optional[str] = Query(None, description="Filtruj po zespole lub lidze"),
-    dyscyplina: Optional[str] = Query(None, description="Pilka Nozna, Tenis, Koszykowka lub Hokej na Lodzie")
+    dyscyplina: Optional[str] = Query(None, description="Pilka Nozna, Tenis, Koszykowka lub Hokej na Lodzie"),
+    token: str = Depends(weryfikuj_klucz)
 ):
     wyniki = GLOBAL_EVENTS_CACHE
     if dyscyplina:
@@ -118,7 +127,7 @@ def pobierz_liste_meczow(
     return {"metadane": CACHE_METADATA, "liczba_meczow": len(lista_skrocona), "mecze": lista_skrocona}
 
 @app.get("/api/mecz-detale")
-def pobierz_wszystkie_rynki_meczu(mecz_id: str):
+def pobierz_wszystkie_rynki_meczu(mecz_id: str, token: str = Depends(weryfikuj_klucz)):
     for event in GLOBAL_EVENTS_CACHE:
         if event["mecz_id"] == mecz_id:
             return {
