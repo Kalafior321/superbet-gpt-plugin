@@ -28,6 +28,21 @@ paths:
       responses:
         '200':
           description: Sukces. Zwraca listę podstawową.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  metadane:
+                    type: object
+                    additionalProperties: true
+                  liczba_meczow:
+                    type: integer
+                  mecze:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: true
   /api/mecz-detale:
     get:
       summary: Pobierz wszystkie zaawansowane rynki dla wybranego meczu
@@ -44,6 +59,26 @@ paths:
       responses:
         '200':
           description: Pełne zestawienie rynków i kursów.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  mecz:
+                    type: string
+                  liga:
+                    type: string
+                  data_meczu:
+                    type: string
+                  wszystkie_rynki_oferty:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: true
+        '401':
+          description: Brak lub nieprawidłowy X-API-Key.
+        '404':
+          description: Nie znaleziono meczu.
 components:
   schemas: {}
   securitySchemes:
