@@ -77,9 +77,18 @@ def normalize_record(record: Dict[str, Any], source_kind: str) -> Dict[str, Any]
     }
 
 
+@app.get("/")
 @app.get("/healthz")
 def healthz():
-    return {"service": "ok", "automatic_polling_active": False, "status": CACHE_METADATA["status"]}
+    """Liveness and truthful import readiness; never expose the API secret."""
+    return {
+        "service": "ok",
+        "automatic_polling_active": False,
+        "import_auth_configured": bool(SECRET_API_KEY),
+        "snapshot_loaded": bool(GLOBAL_EVENTS_CACHE),
+        "storage_mode": "ephemeral_memory",
+        "status": CACHE_METADATA["status"],
+    }
 
 
 @app.post("/api/import-snapshot")

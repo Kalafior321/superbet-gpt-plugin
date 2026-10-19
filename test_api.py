@@ -37,7 +37,13 @@ class ApiTests(unittest.TestCase):
             self.assertEqual(result["liczba_meczow"], 0)
             self.assertEqual(result["metadane"]["status"], "BRAK_AUTORYZOWANEGO_ZRODLA")
             self.assertFalse(result["metadane"]["automatic_polling_active"])
-            self.assertEqual(client.get("/healthz").json()["service"], "ok")
+            health = client.get("/healthz")
+            self.assertEqual(health.status_code, 200)
+            self.assertEqual(health.json()["service"], "ok")
+            self.assertTrue(health.json()["import_auth_configured"])
+            self.assertFalse(health.json()["snapshot_loaded"])
+            self.assertEqual(health.json()["storage_mode"], "ephemeral_memory")
+            self.assertEqual(client.get("/").json(), health.json())
 
     def test_import_fixture_and_search_without_invented_prices(self):
         response = self.client.post("/api/import-snapshot", headers=HEADERS, json=self.payload())
