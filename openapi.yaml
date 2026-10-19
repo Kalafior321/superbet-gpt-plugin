@@ -6,13 +6,20 @@ info:
 servers:
   - url: https://superbet-gpt-plugin.onrender.com
 paths:
+  /:
+    get:
+      operationId: checkRootHealth
+      summary: Publiczny status dostępności serwera, bez sekretów
+      responses:
+        '200':
+          description: Status serwera, konfiguracja klucza (tak/nie) i nietrwałość pamięci.
   /healthz:
     get:
       operationId: checkHealth
       summary: Status serwera bez klucza i bez pobierania danych
       responses:
         '200':
-          description: Proces działa; status pobierania w treści.
+          description: Proces działa; wskazuje import_auth_configured, snapshot_loaded, storage_mode i status pobierania.
   /api/kursy:
     get:
       operationId: pobierzListeMeczow
