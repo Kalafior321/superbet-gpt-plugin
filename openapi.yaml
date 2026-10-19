@@ -1,86 +1,87 @@
 openapi: 3.1.0
 info:
-  title: Superbet Scheduled Multi-Market API
-  description: Wtyczka do sprawdzania pełnej oferty kursowej i wszystkich podrynków z Superbet. Aktualizowana o 10:00 i 16:00.
-  version: 1.0.0
+  title: Superbet Read-only Offer Bridge
+  description: 'Archiwalne i ręcznie importowane dane, bez automatycznego pobierania, potwierdzania kursów ani obstawiania.'
+  version: 1.1.0
 servers:
   - url: https://superbet-gpt-plugin.onrender.com
 paths:
+  /healthz:
+    get:
+      operationId: checkHealth
+      summary: Status serwera bez klucza i bez pobierania danych
+      responses:
+        '200':
+          description: Proces działa; status pobierania w treści.
   /api/kursy:
     get:
-      summary: Pobierz listę meczów i kursy główne 1X2
+      operationId: pobierzListeMeczow
+      summary: Odczytaj istniejący zaimportowany snapshot z jawnym statusem źródła
       security:
         - ApiKeyAuth: []
-      operationId: pobierzListeMeczow
       parameters:
         - name: szukaj
           in: query
-          required: false
-          description: Nazwa szukanego zespołu lub ligi.
-          schema:
-            type: string
+          schema: {type: string}
         - name: dyscyplina
           in: query
-          required: false
-          schema:
-            type: string
-            enum: ["Pilka Nozna", "Tenis", "Koszykowka", "Hokej na Lodzie"]
+          schema: {type: string}
       responses:
         '200':
-          description: Sukces. Zwraca listę podstawową.
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  metadane:
-                    type: object
-                    additionalProperties: true
-                  liczba_meczow:
-                    type: integer
-                  mecze:
-                    type: array
-                    items:
-                      type: object
-                      additionalProperties: true
+          description: Dane mogą być puste, a źródło może być niezweryfikowane.
+        '401':
+          description: Nieprawidłowy X-API-Key.
   /api/mecz-detale:
     get:
-      summary: Pobierz wszystkie zaawansowane rynki dla wybranego meczu
+      operationId: pobierzWszystkieRynkiMeczu
+      summary: Zwróć zapisane rynki, bez ich automatycznego odświeżania
       security:
         - ApiKeyAuth: []
-      operationId: pobierzWszystkieRynkiMeczu
       parameters:
         - name: mecz_id
           in: query
           required: true
-          description: Identyfikator meczu pobrany z endpointu /api/kursy.
-          schema:
-            type: string
+          schema: {type: string}
       responses:
         '200':
-          description: Pełne zestawienie rynków i kursów.
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  mecz:
-                    type: string
-                  liga:
-                    type: string
-                  data_meczu:
-                    type: string
-                  wszystkie_rynki_oferty:
-                    type: array
-                    items:
-                      type: object
-                      additionalProperties: true
+          description: Historyczne zaimportowane szczegóły.
         '401':
-          description: Brak lub nieprawidłowy X-API-Key.
+          description: Nieprawidłowy X-API-Key.
         '404':
-          description: Nie znaleziono meczu.
+          description: Brak identyfikatora.
+  /api/import-snapshot:
+    post:
+      operationId: importSnapshot
+      summary: Import operatora (nie automatyczny kolektor); wymaga X-API-Key
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [source_kind, observed_at, mecze]
+              properties:
+                source_kind:
+                  type: string
+                  enum: [manual_superbet_export, footballdata.io]
+                observed_at:
+                  type: string
+                  format: date-time
+                mecze:
+                  type: array
+                  items:
+                    type: object
+                    additionalProperties: true
+      responses:
+        '200':
+          description: Zaimportowano do nietrwałego cache; kursy nie są niezależnie zweryfikowane.
+        '401':
+          description: Brak autoryzacji.
+        '422':
+          description: Błąd struktury, duplikat lub podszywanie kursów FootballData pod Superbet.
 components:
-  schemas: {}
   securitySchemes:
     ApiKeyAuth:
       type: apiKey
