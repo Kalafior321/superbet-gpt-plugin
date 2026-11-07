@@ -1,0 +1,21 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.maciejgolan.underdogsfuzja.ai'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'com.maciejgolan.underdogsfuzja.ai'
+        minSdk 23
+        targetSdk 35
+        versionCode 40
+        versionName '0.4.0'
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
