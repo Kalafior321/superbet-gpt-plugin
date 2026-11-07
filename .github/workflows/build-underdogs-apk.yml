@@ -27,8 +27,11 @@ jobs:
 
       - name: Install Android platform
         run: |
-          yes | sdkmanager --licenses || true
-          sdkmanager "platforms;android-35" "build-tools;35.0.0"
+          SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          SDK_TOOL="$(find "$SDK_ROOT/cmdline-tools" -type f -name sdkmanager -print -quit)"
+          test -n "$SDK_TOOL"
+          echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
+          "$SDK_TOOL" --sdk_root="$SDK_ROOT" "platforms;android-35" "build-tools;35.0.0"
 
       - name: Gradle
         uses: gradle/actions/setup-gradle@v4
