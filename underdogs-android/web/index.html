@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>Underdogs FUZJA AI</title>
+  <style>
+    :root{color-scheme:dark;--bg:#0b1020;--panel:#151e33;--line:#2c3852;--text:#e8edf8;--muted:#9baaca;--accent:#9b75fb;--green:#4ed3a2;--red:#f58b8b}
+    *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 system-ui,-apple-system,Roboto,sans-serif}
+    header{padding:26px 18px 16px;background:linear-gradient(145deg,#28204a,#0b1020)}
+    h1{font-size:27px;margin:4px 0 0;letter-spacing:-.03em}.kicker{color:var(--green);font-size:12px;font-weight:800;letter-spacing:.13em}
+    main{max-width:850px;margin:auto;padding:13px 12px 50px}.panel{background:var(--panel);border:1px solid var(--line);border-radius:15px;padding:16px;margin:13px 0}
+    h2{font-size:17px;margin:0 0 12px}.subtle{color:var(--muted);font-size:12px}.note{background:#252143;padding:10px;border-radius:8px;color:#ded4ff;font-size:12px}
+    label{display:block;font-size:12px;color:var(--muted);margin:9px 0 4px}
+    input,select,textarea{width:100%;min-height:42px;padding:10px;border:1px solid #3b4662;border-radius:9px;background:#0d172b;color:var(--text);font:inherit}
+    textarea{resize:vertical;min-height:70px}
+    button{cursor:pointer;border:0;border-radius:10px;padding:12px 15px;font-size:14px;font-weight:800;background:var(--accent);color:#0b0820;min-height:43px}
+    button.secondary{background:#2a3650;color:#ecf1fb}button:disabled{opacity:.5;cursor:default}
+    .row{display:flex;gap:9px;align-items:center;flex-wrap:wrap}.row>*{flex:1}
+    .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px}
+    .grid .wide{grid-column:1/-1}.card{border:1px solid var(--line);background:#0f182b;border-radius:11px;padding:12px;margin:8px 0}
+    .card label{font-size:14px;color:var(--text);margin:0;display:flex;align-items:flex-start;gap:10px}
+    .card input[type=checkbox]{min-height:18px;height:19px;width:19px;flex:none;margin-top:3px;accent-color:var(--green)}
+    .match{font-weight:750}.status{margin-top:8px;color:var(--muted);white-space:pre-wrap}.status.error{color:var(--red)}
+    .hidden{display:none}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#0c172a;padding:13px;border-radius:11px;border:1px solid var(--line);font:13px/1.55 system-ui}
+    @media(max-width:420px){.grid{grid-template-columns:1fr}.grid .wide{grid-column:auto}h1{font-size:24px}}
+  </style>
+</head>
+<body>
+  <header><div class="kicker">UNDERDOGS · FUZJA · 0.4.0 TEST</div><h1>Faworyt ma nazwę.<br>Outsider może mieć formę.</h1><p class="subtle">Terminarz · selekcja · analiza z ochroną klucza API</p></header>
+  <main>
+    <section class="panel">
+      <h2>🔐 Twoje konto</h2>
+      <p class="subtle">Zaloguj się do konta tej aplikacji. Nie podawaj hasła do Superbet.</p>
+      <div id="loginBox">
+        <label for="email">E-mail</label><input id="email" type="email" autocomplete="username" placeholder="twoj@email.pl">
+        <label for="password">Hasło (minimum 6 znaków)</label><input id="password" type="password" autocomplete="current-password">
+        <div class="row" style="margin-top:11px">
+          <button id="login">Zaloguj</button><button id="signup" class="secondary">Utwórz konto</button>
+        </div>
+      </div>
+      <div id="loggedBox" class="hidden row"><span id="accountLabel" class="subtle">Zalogowano</span><button id="logout" class="secondary">Wyloguj</button></div>
+      <div id="authStatus" class="status" role="status">Wymagane logowanie przed pobieraniem danych.</div>
+    </section>
+    <section class="panel">
+      <h2>🔎 Wyszukaj mecze</h2>
+      <div class="grid">
+        <div><label for="sport">Dyscyplina</label><select id="sport"><option value="Soccer">⚽ Piłka nożna</option><option value="Ice Hockey">🏒 Hokej</option><option value="Basketball">🏀 Koszykówka</option></select></div>
+        <div><label for="date">Data meczu</label><input id="date" type="date"></div>
+        <div><label for="league">ID ligi (opcjonalnie)</label><input id="league" inputmode="numeric" placeholder="np. 4328 – Premier League"></div>
+        <div><label for="team">Drużyna / liga – filtr</label><input id="team" placeholder="np. Arsenal"></div>
+        <div class="wide"><button id="search" style="width:100%">Pobierz terminarz</button></div>
+      </div>
+      <p class="note">Dane: TheSportsDB Free. Darmowa odpowiedź może obejmować tylko 3 wydarzenia; brak meczu na liście nie oznacza, że nie jest rozgrywany. Kursów bukmacherskich to źródło nie dostarcza.</p>
+      <div id="searchStatus" class="status" role="status"></div>
+      <div id="events"></div>
+    </section>
+    <section class="panel">
+      <h2>🧠 Analiza FUZJA</h2>
+      <p class="subtle">Zaznacz 1–10 wydarzeń. Dopisz dostępne statystyki i kursy; model nie pobiera ich samodzielnie.</p>
+      <label for="notes">Forma z 5 meczów, dom/wyjazd, kontuzje, kursy (opcjonalnie)</label>
+      <textarea id="notes" maxlength="1200" placeholder="Np. gospodarze: W-W-D-L-W; goście: L-D-W-L-W; kurs 1X2: 2.30 / 3.25 / 2.95"></textarea>
+      <div class="row" style="margin-top:12px"><button id="analyze">Analizuj zaznaczone</button><span id="selectedCount" class="subtle">0 wybranych</span></div>
+      <div id="aiStatus" class="status" role="status"></div>
+      <pre id="analysis" class="hidden"></pre>
+      <p class="subtle">To prognoza, nie gwarancja. Aplikacja nie stawia zakładów ani nie obsługuje cash out.</p>
+    </section>
+  </main>
+  <script>
+    "use strict";
+    const BASE = "__PROJECT_URL__";
+    const PUB = "__PUBLISHABLE_KEY__";
+    const APP = BASE + "/functions/v1/underdogs-app";
+    const ANALYZE = BASE + "/functions/v1/underdogs-analyze";
+    const el = (id) => document.getElementById(id);
+    let accessToken = sessionStorage.getItem("ud_access") || "";
+    let selected = new Set();
+    let currentEvents = [];
+
+    const today = new Intl.DateTimeFormat("en-CA", {timeZone:"Europe/Warsaw",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());
+    el("date").value = /^\d{4}-\d{2}-\d{2}$/.test(today) ? today : new Date().toISOString().slice(0,10);
+
+    function status(id, text, error) {
+      el(id).textContent = text;
+      el(id).className = "status" + (error ? " error" : "");
+    }
+    function updateAuth() {
+      el("loginBox").classList.toggle("hidden", !!accessToken);
+      el("loggedBox").classList.toggle("hidden", !accessToken);
+      el("search").disabled = !accessToken;
+      el("analyze").disabled = !accessToken;
+      el("accountLabel").textContent = accessToken ? "Sesja aktywna" : "";
+      if (accessToken) status("authStatus", "✅ Zalogowano. Możesz pobierać terminarz.", false);
+    }
+    async function auth(path, payload) {
+      const res = await fetch(BASE + "/auth/v1/" + path, {
+        method:"POST",
+        headers:{"Content-Type":"application/json", "apikey":PUB},
+        body:JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.msg || data.error_description || data.message || "Błąd logowania");
+      return data;
+    }
+    async function signIn(signup) {
+      const email = el("email").value.trim();
+      const password = el("password").value;
+      if (!email.includes("@") || password.length < 6) {status("authStatus","Podaj poprawny e-mail i hasło (min. 6 znaków).",true);return;}
+      status("authStatus", "Łączenie...", false);
+      try {
+        const data = await auth(signup ? "signup" : "token?grant_type=password", {email,password});
+        if (data.access_token) {
+          accessToken = data.access_token;
+          sessionStorage.setItem("ud_access",accessToken);
+          el("password").value = "";
+          updateAuth();
+        } else {
+          status("authStatus","Konto utworzone. Sprawdź e-mail i potwierdź rejestrację, potem się zaloguj.",false);
+        }
+      } catch (err) {status("authStatus",String(err.message || err),true);}
+    }
+    el("login").onclick = () => signIn(false);
+    el("signup").onclick = () => signIn(true);
+    el("logout").onclick = () => {accessToken="";sessionStorage.removeItem("ud_access");updateAuth();status("authStatus","Wylogowano.",false);};
+
+    function node(tag, className, text) {
+      const n = document.createElement(tag);
+      if (className) n.className = className;
+      if (text != null) n.textContent = text;
+      return n;
+    }
+    function matchTitle(event) {
+      return event.strEvent || ((event.strHomeTeam || "?") + " – " + (event.strAwayTeam || "?"));
+    }
+    function renderEvents(events) {
+      currentEvents = events;
+      selected = new Set();
+      el("events").replaceChildren();
+      el("selectedCount").textContent = "0 wybranych";
+      if (!events.length) {el("events").appendChild(node("p","subtle","Nie ma danych dla tych filtrów w ograniczonej odpowiedzi źródła."));return;}
+      events.forEach((event,index) => {
+        const id = String(event.idEvent || index);
+        const card = node("div","card");
+        const label = node("label");
+        const check = node("input");
+        check.type = "checkbox";
+        check.onchange = () => {
+          if (check.checked && selected.size >= 10) {check.checked=false;status("searchStatus","Maksymalnie 10 wydarzeń.",true);return;}
+          if (check.checked) selected.add(id); else selected.delete(id);
+          el("selectedCount").textContent = selected.size + " wybranych";
+        };
+        const texts = node("div");
+        texts.appendChild(node("div","match",matchTitle(event)));
+        texts.appendChild(node("div","subtle",(event.strLeague || "Liga nieznana") + " · " + (event.dateEvent || "?") + " " + (event.strTime || "") + " UTC"));
+        label.append(check,texts);
+        card.appendChild(label);
+        el("events").appendChild(card);
+      });
+    }
+    async function apiFetch(url, options) {
+      const opts = options || {};
+      opts.headers = Object.assign({}, opts.headers || {}, {"Authorization":"Bearer " + accessToken,"apikey":PUB});
+      const r = await fetch(url,opts);
+      let data = {};
+      try {data = await r.json();} catch {}
+      if (!r.ok) {
+        if (r.status === 401) {accessToken="";sessionStorage.removeItem("ud_access");updateAuth();}
+        throw new Error(data.error || ("HTTP " + r.status));
+      }
+      return data;
+    }
+    el("search").onclick = async () => {
+      const button = el("search");
+      button.disabled = true;
+      status("searchStatus","Pobieram...",false);
+      try {
+        const qs = new URLSearchParams({api:"events",d:el("date").value,s:el("sport").value});
+        if (el("league").value.trim()) qs.set("l",el("league").value.trim());
+        const data = await apiFetch(APP + "?" + qs.toString());
+        const needle = el("team").value.trim().toLowerCase();
+        const filtered = (data.events || []).filter(x => !needle || [x.strEvent,x.strLeague,x.strHomeTeam,x.strAwayTeam].some(y => String(y || "").toLowerCase().includes(needle)));
+        renderEvents(filtered);
+        status("searchStatus","Źródło: " + (data.source || "TheSportsDB") + ". Pokazano " + filtered.length + " z maks. 3 wyników darmowego feedu.",false);
+      } catch (err) {status("searchStatus","Nie udało się pobrać meczów: " + (err.message || err),true);}
+      finally {button.disabled = !accessToken;}
+    };
+    el("analyze").onclick = async () => {
+      const matches = currentEvents.filter((e,i) => selected.has(String(e.idEvent || i))).map(e => ({
+        home:e.strHomeTeam, away:e.strAwayTeam, league:e.strLeague,
+        date:e.dateEvent, timeUTC:e.strTime, sport:e.strSport,
+        source:"TheSportsDB Free", notes:el("notes").value.slice(0,1200)
+      }));
+      if (!matches.length) {status("aiStatus","Najpierw zaznacz mecz.",true);return;}
+      const button = el("analyze");
+      button.disabled = true;
+      el("analysis").classList.add("hidden");
+      status("aiStatus","Analiza AI trwa (może wykorzystać płatny limit OpenAI API)...",false);
+      try {
+        const data = await apiFetch(ANALYZE,{
+          method:"POST",headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({matches,task:"Wskaż ostrożne rynki 1X2, gole i BTTS, ryzyko oraz outsiderów w formie. Bez wymyślania kursów i %."})
+        });
+        el("analysis").textContent = data.analysis || "Brak treści z modelu. Sprawdź logi backendu.";
+        el("analysis").classList.remove("hidden");
+        status("aiStatus","✅ Analiza zakończona.",false);
+      } catch (err) {status("aiStatus","Błąd analizy: " + (err.message || err),true);}
+      finally {button.disabled = !accessToken;}
+    };
+    updateAuth();
+  </script>
+</body>
+</html>
