@@ -1,0 +1,36 @@
+{
+  "events": [
+    {
+      "id": "SAMPLE-NOT-LIVE",
+      "fixture": {
+        "event_name": "Atlanta Hawks vs Charlotte Hornets",
+        "startTime": "2026-11-21T00:00:00Z"
+      },
+      "markets": [
+        {
+          "name": "Suma punktów 222.5",
+          "odds": [
+            {"metadata": {"name": "Powyżej"}, "price": 1.88},
+            {"metadata": {"name": "Poniżej"}, "price": 1.92}
+          ]
+        },
+        {
+          "name": "Punkty drużyny Atlanta Hawks",
+          "line": 115.5,
+          "odds": [
+            {"metadata": {"name": "Powyżej"}, "price": 1.87},
+            {"metadata": {"name": "Poniżej"}, "price": 1.93}
+          ]
+        },
+        {
+          "name": "Punkty drużyny Charlotte Hornets",
+          "line": 107.5,
+          "odds": [
+            {"metadata": {"name": "Powyżej"}, "price": 1.84},
+            {"metadata": {"name": "Poniżej"}, "price": 1.96}
+          ]
+        }
+      ]
+    }
+  ]
+}

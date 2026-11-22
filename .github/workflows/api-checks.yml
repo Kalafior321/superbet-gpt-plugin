@@ -14,3 +14,5 @@ jobs:
           python-version: '3.12'
       - run: pip install -r requirements.txt httpx
       - run: python -m unittest -v test_api
+      - name: MEGASUPERFUZJA client smoke tests (offline)
+        run: python -m unittest discover -s tests -p 'test_megasuperfuzja_client.py' -v

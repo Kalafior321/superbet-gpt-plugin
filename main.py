@@ -158,3 +158,22 @@ def pobierz_wszystkie_rynki_meczu(mecz_id: str, _: None = Depends(weryfikuj_kluc
                 "source_kind": event["source_kind"], "superbet_prices_verified": False,
             }
     raise HTTPException(status_code=404, detail="Nie znaleziono meczu")
+
+from megasuperfuzja_client import MegaFuzjaClient, MegaFuzjaUnavailable
+
+
+@app.get("/api/mega/overview")
+def megafuzja_overview(_: None = Depends(weryfikuj_klucz)):
+    """Authenticated cross-service read of the D1 gateway."""
+    try:
+        return MegaFuzjaClient().overview()
+    except MegaFuzjaUnavailable:
+        raise HTTPException(status_code=503, detail="MEGA_D1_GATEWAY_UNAVAILABLE")
+
+
+@app.get("/api/mega/catalog")
+def megafuzja_catalog(_: None = Depends(weryfikuj_klucz), kind: Optional[str] = Query(None)):
+    try:
+        return MegaFuzjaClient().catalog(category=kind, limit=50)
+    except (MegaFuzjaUnavailable, ValueError):
+        raise HTTPException(status_code=503, detail="MEGA_D1_GATEWAY_UNAVAILABLE")
