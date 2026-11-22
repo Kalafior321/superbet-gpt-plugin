@@ -28,7 +28,7 @@ from reader_browser import (
     extract_event_cards, extract_extra_stats, extract_markets,
     validated_url,
 )
-from superbet_value_lab import ALLOWED_SPORTS, parse_feed, season_context
+from superbet_value_lab import ALLOWED_SPORTS, SPORTS_SCOPE, parse_feed, season_context
 
 LOG = logging.getLogger("fuzja_czytnik")
 WARSAW = ZoneInfo("Europe/Warsaw")
@@ -314,7 +314,18 @@ def health():
         "api_auth_configured": len(os.environ.get("READER_API_TOKEN", "")) >= 32,
         "season_context": season_context(datetime.now(timezone.utc)),
         "targets_configured": len(os.environ.get("SUPERBET_TARGETS_JSON", "")) > 0,
+        "nba_hockey_scope_enabled": True,
+        "nba_hockey_live_quotes_verified": bool(STATE.result.get("live_market_read_confirmed", False)) and any(
+            event.get("sport", "").lower() in ({"nba", "basketball", "nhl", "ahl", "echl", "ohl", "whl", "qmjhl", "ushl", "hockey"})
+            for event in STATE.result.get("events", [])),
     }
+
+
+@app.get("/scope")
+def scope():
+    return {"sports": SPORTS_SCOPE, "status": "CONFIGURED_NOT_LIVE_VERIFIED",
+            "no_ev": True, "no_automatic_bets": True,
+            "note": "Coverage describes parsable markets, not confirmed Superbet listings."}
 
 
 @app.get("/odds")
