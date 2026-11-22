@@ -1,0 +1,17 @@
+name: Reader 4.1 regression tests
+on:
+  push:
+    branches: [megasuperfuzja-20261122]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  reader-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r reader4/requirements.txt -r reader4/requirements-dev.txt
+      - run: cd reader4 && python -m pytest -q tests/
