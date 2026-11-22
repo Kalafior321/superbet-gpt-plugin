@@ -23,7 +23,7 @@ class MegaFuzjaUnavailable(RuntimeError):
 class MegaFuzjaClient:
     def __init__(self, token: str | None = None, base_url: str | None = None, timeout: float = 8.0):
         self.base_url = (base_url or os.environ.get("MEGAFUZJA_API_URL") or ORIGIN).rstrip("/")
-        if self.base_url != ORIGIN:
+        if self.base_url not in (ORIGIN, "https://megasuperfuzja-api-staging.max-gollan.workers.dev"):
             raise ValueError("Gateway origin not allowlisted")
         self._token = token if token is not None else os.environ.get("MEGAFUZJA_READ_TOKEN", "")
         if not (0.1 <= float(timeout) <= 30):
