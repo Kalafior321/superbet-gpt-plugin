@@ -11,3 +11,10 @@ Central read-only gateway: https://megasuperfuzja-api.max-gollan.workers.dev
 - Before merging: run tests, provision the server-only secret, smoke test authenticated /v1/overview and /v1/catalog, verify Render deployment and rollback; leave D1 history untouched.
 
 Security: app-level SELECT-only API does not reduce the Cloudflare Worker binding's underlying D1 privileges. Keep this Worker source reviewed.
+
+## 22.11.2026 – uruchomienie testowe
+- Staging Render: https://megasuperfuzja-bridge-staging.onrender.com/healthz; deploy status live, snapshot data not loaded.
+- D1 Gateway staging: odczyt wymaga `MEGAFUZJA_READ_TOKEN` dopasowanego do tajnego `MEGA_READ_TOKEN` bramy Cloudflare. Token nie jest obecnie ustawiony na Render, więc integracja end-to-end jest NIEAKTYWNA.
+- Nie łącz staging z produkcyjną D1 bez ponownego potwierdzenia polityki dostępu i testów na testowej bazie.
+- Czytnik 4.1: nowe zabezpieczenia HTTP i 68/68 testów offline. Plik `Superbet_FUZJA_Czytnik_4_1_SECURE_OFFLINE.zip` jest dostarczony w rozmowie; NIE został wdrożony na Render ani nie pobiera kursów live. 
+- CI na tej gałęzi testuje bazowego klienta D1, ale nie instaluje czytnika 4.1. Prawdziwy parser musi zostać wprowadzony z zatwierdzonego archiwum.
