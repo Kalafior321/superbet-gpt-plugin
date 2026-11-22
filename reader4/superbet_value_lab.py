@@ -30,7 +30,28 @@ ORIGIN = "https://superbet.pl"
 MAX_EVENTS = 2000
 MAX_MARKETS_PER_EVENT = 1000
 MAX_ODDS_PER_MARKET = 500
-ALLOWED_SPORTS = {"football", "soccer", "nba", "nhl", "ahl", "hockey", "basketball", "all"}
+# League labels are accepted as read-target hints, not claimed provider sport IDs.
+HOCKEY_LEAGUES = {"nhl", "ahl", "echl", "ohl", "whl", "qmjhl", "ushl", "hockey"}
+BASKETBALL_LEAGUES = {"nba", "basketball"}
+ALLOWED_SPORTS = {"football", "soccer", "all"} | HOCKEY_LEAGUES | BASKETBALL_LEAGUES
+
+# Coverage is a requested analytical scope. It is NOT evidence that the bookmaker
+# offers these markets or that a live source has supplied any quotes.
+SPORTS_SCOPE = {
+    "nba": {"leagues": ["NBA"], "markets": ["full_game_total_points", "team_total_points", "quarter_totals", "half_totals", "spread", "moneyline", "player_points", "player_rebounds", "player_assists", "player_threes", "player_combos"]},
+    "hockey": {"leagues": ["NHL", "AHL", "ECHL", "OHL", "WHL", "QMJHL", "USHL"], "markets": ["full_game_total_goals", "team_total_goals", "period_1_over_under_0.5_1.5", "period_2_totals", "period_3_totals", "puck_line", "moneyline", "team_shots", "player_shots", "player_points", "player_goals", "goalie_saves", "penalty_minutes"]},
+}
+
+def sport_family(sport: str) -> str:
+    key = str(sport).lower()
+    if key in BASKETBALL_LEAGUES:
+        return "basketball"
+    if key in HOCKEY_LEAGUES:
+        return "hockey"
+    if key in {"football", "soccer"}:
+        return "football"
+    return "unknown"
+
 
 
 def textnorm(value: Any) -> str:
@@ -133,8 +154,16 @@ def _period(name: str) -> str:
         return "p2"
     if re.search(r"\b(3\s*\.?\s*tercja|trzecia tercja|3rd period|third period|period 3)\b", s):
         return "p3"
+    for num, english, polish in ((1, "first", "pierwsza"), (2, "second", "druga"),
+                                 (3, "third", "trzecia"), (4, "fourth", "czwarta")):
+        suffix = {1: "st", 2: "nd", 3: "rd", 4: "th"}[num]
+        if (re.search(rf"\b({num}{suffix} quarter|quarter {num}|{english} quarter)\b", s)
+            or re.search(rf"\b({num}\s*\.?\s*kwarta|{polish} kwarta)\b", s)):
+            return f"q{num}"
     if re.search(r"\b(1st half|first half|1\s*\.?\s*polowa|pierwsza polowa)\b", s):
         return "h1"
+    if re.search(r"\b(2nd half|second half|2\s*\.?\s*polowa|druga polowa)\b", s):
+        return "h2"
     return "full"
 
 
@@ -148,11 +177,11 @@ def _market_kind(name: str, sport: str) -> str | None:
     total_words = ("over/under", "under/over", "suma", "laczna", "liczba", "total", "gole", "goli", "bramki", "bramek", "goals", "punkty", "punktow", "points")
     if not any(w in s for w in total_words):
         return None
-    if sport in ("nba", "basketball") or (sport == "all" and any(w in s for w in ("points", "punkty", "punktow"))):
+    if sport in BASKETBALL_LEAGUES or (sport == "all" and any(w in s for w in ("points", "punkty", "punktow"))):
         if any(w in s for w in ("gole", "goli", "goals", "bramki", "bramek")):
             return None
         return "points"
-    if sport in ("nhl", "ahl", "hockey", "football", "soccer") or (sport == "all" and any(w in s for w in ("goals", "gole", "goli", "bramki", "bramek"))):
+    if sport in (HOCKEY_LEAGUES | {"football", "soccer"}) or (sport == "all" and any(w in s for w in ("goals", "gole", "goli", "bramki", "bramek"))):
         if any(w in s for w in ("punkty", "punktow", "points")):
             return None
         return "goals"
@@ -281,6 +310,10 @@ def season_context(now: datetime) -> dict:
             "last_three_completed_european": europe_history,
             "current_mls": str(local.year),
             "last_three_completed_mls": mls_history,
+            # The conventional autumn-to-summer season. The provider remains authoritative.
+            "current_nba": f"{local.year if local.month >= 9 else local.year-1}/{str((local.year if local.month >= 9 else local.year-1)+1)[-2:]}",
+            "current_hockey": f"{local.year if local.month >= 9 else local.year-1}/{str((local.year if local.month >= 9 else local.year-1)+1)[-2:]}",
+            "last_three_completed_nba_hockey": europe_history if local.month >= 9 else [f"{y}/{str(y+1)[-2:]}" for y in range(local.year-4,local.year-1)],
             "inferred_calendar_context_only": True}
 
 
@@ -414,7 +447,8 @@ def parse_feed(payload: dict, sport: str, *, read_at: datetime | None = None,
                      "event_name": title or f"{home} vs {away}",
                      "home": home, "away": away,
                      "start_utc": event_time.isoformat() if event_time else None,
-                     "sport_requested": sport, "competition": _competition(event, fixture),
+                     "sport_requested": sport, "sport_family": sport_family(sport),
+                     "competition": _competition(event, fixture),
                      "quote_time_verified": False,
                      "observed_at_utc": observed,
                      "selections": sorted(selections.values(), key=lambda s:s["key"])})
