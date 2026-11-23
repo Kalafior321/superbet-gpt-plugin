@@ -25,7 +25,7 @@ jobs:
           python -m pip install -r requirements.txt
       - name: Lint bridge sources
         run: |
-          python -m flake8 main.py footballdata.py test_api.py --count --select=E9,F63,F7,F82 --show-source --statistics
+          python -m flake8 main.py footballdata.py fuzja_extra_sources.py test_api.py test_fuzja_sources.py --count --select=E9,F63,F7,F82 --show-source --statistics
           python -m flake8 main.py footballdata.py test_api.py --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
       - name: Run bridge regression tests
-        run: python -m unittest -v test_api
+        run: python -m unittest -v test_api test_fuzja_sources

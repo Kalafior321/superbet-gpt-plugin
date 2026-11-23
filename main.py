@@ -158,3 +158,33 @@ def pobierz_wszystkie_rynki_meczu(mecz_id: str, _: None = Depends(weryfikuj_kluc
                 "source_kind": event["source_kind"], "superbet_prices_verified": False,
             }
     raise HTTPException(status_code=404, detail="Nie znaleziono meczu")
+
+
+# FUZJA source discovery is separate from Superbet offer import and model forecasts.
+from fuzja_extra_sources import SourceError as ExtraSourceError
+from fuzja_extra_sources import fetch as fetch_extra_source
+from fuzja_extra_sources import status as extra_source_status
+
+
+@app.get("/api/fuzja/sources")
+def fuzja_source_status(_: None = Depends(weryfikuj_klucz)):
+    return {"sources": extra_source_status(), "automatic_polling_active": False}
+
+
+@app.get("/api/fuzja/sources/{source}")
+def fuzja_source_read(
+    source: str,
+    league: str = Query("mls"),
+    season: int = Query(2026, ge=2000, le=2100),
+    dataset: Optional[str] = Query(None),
+    team: Optional[str] = Query(None),
+    limit: int = Query(50, ge=1, le=100),
+    _: None = Depends(weryfikuj_klucz),
+):
+    mode = dataset or ("get_team_stats" if source == "strikerapi" else "games")
+    try:
+        return fetch_extra_source(source, league=league, season=season, dataset=mode,
+                                  team=team, limit=limit)
+    except ExtraSourceError as exc:
+        # No secret, private URL or raw provider error details leave this API.
+        raise HTTPException(status_code=409, detail=str(exc)) from None
