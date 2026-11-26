@@ -7,24 +7,25 @@ import asyncio
 import csv
 import io
 import ipaddress
-import json
+import hmac
 import os
 import socket
 from datetime import datetime, timezone
 from urllib.parse import urljoin, urlparse
+from urllib.robotparser import RobotFileParser
 
 from bs4 import BeautifulSoup
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi.responses import Response
-from openai import OpenAI
 from playwright.async_api import async_playwright
 from pydantic import BaseModel, Field, HttpUrl
 
 APP_TOKEN = os.environ.get("COLLECTOR_API_TOKEN", "")
-OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
-MAX_PAGES = int(os.environ.get("MAX_PAGES_PER_RUN", "12"))
-client = OpenAI()
-app = FastAPI(title="Underdogs FUZJA Collector", version="0.1.0")
+MAX_PAGES = max(1, min(4, int(os.environ.get("MAX_PAGES_PER_RUN", "4"))))
+ALLOWED_HOSTS = {"superscore.live", "soccerstats.com", "www.soccerstats.com", "statmuse.com", "www.statmuse.com"}
+USER_AGENT = "UnderdogsFUZJA/0.2"
+collect_lock = asyncio.Lock()
+app = FastAPI(title="Underdogs FUZJA Collector", version="0.2.0")
 
 
 class CollectRequest(BaseModel):
@@ -34,14 +35,15 @@ class CollectRequest(BaseModel):
 
 
 def require_token(x_collector_token: str = Header(default="")):
-    if not APP_TOKEN or x_collector_token != APP_TOKEN:
+    if not APP_TOKEN or not hmac.compare_digest(x_collector_token, APP_TOKEN):
         raise HTTPException(status_code=401, detail="Unauthorized")
 
 
 def public_https_url(raw_url: str) -> str:
     parsed = urlparse(raw_url)
-    if parsed.scheme != "https" or not parsed.hostname:
-        raise HTTPException(status_code=400, detail="Only public HTTPS URLs are allowed")
+    if (parsed.scheme != "https" or parsed.hostname not in ALLOWED_HOSTS
+            or parsed.username or parsed.password or parsed.port not in (None, 443)):
+        raise HTTPException(status_code=400, detail="Only approved public HTTPS hosts are allowed")
     try:
         addresses = {item[4][0] for item in socket.getaddrinfo(parsed.hostname, 443)}
         for address in addresses:
@@ -61,60 +63,87 @@ def visible_text(html: str) -> str:
 
 
 def extract(text: str, url: str, goal: str) -> dict:
-    if not text:
+    """Free deterministic extraction; raw text is not a verified sports record."""
+    if not text.strip():
         return {}
-    response = client.chat.completions.create(
-        model=OPENAI_MODEL,
-        response_format={"type": "json_object"},
-        messages=[
-            {"role": "system", "content": "Extract only factual data relevant to the goal. Return one flat JSON object; use {} when nothing is relevant."},
-            {"role": "user", "content": f"Goal: {goal}\nURL: {url}\nPage text:\n{text}"},
-        ],
-        temperature=0,
-    )
-    return json.loads(response.choices[0].message.content or "{}")
-
+    return {"visible_text": text[:12000], "extraction_status": "raw_text_only",
+            "structured_data_verified": False, "paid_api_used": False}
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "model": OPENAI_MODEL, "time": datetime.now(timezone.utc).isoformat()}
-
+    return {"status": "ok", "model": None, "mode": "free_raw_text",
+            "paid_api_used": False, "time": datetime.now(timezone.utc).isoformat()}
 
 @app.post("/collect", dependencies=[Depends(require_token)])
 async def collect(request: CollectRequest):
-    base_url = public_https_url(str(request.base_url))
+    base_url = await asyncio.to_thread(public_https_url, str(request.base_url))
     base_host = urlparse(base_url).hostname
-    queue, visited, records = [(base_url, 0)], set(), []
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
-        page = await browser.new_page(viewport={"width": 1280, "height": 800})
-        try:
-            while queue and len(visited) < MAX_PAGES:
-                current, depth = queue.pop(0)
-                if current in visited or depth > request.max_depth:
-                    continue
-                current = public_https_url(current)
-                visited.add(current)
+    queue, visited, records, errors = [(base_url, 0)], set(), [], []
+    async with collect_lock:
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(headless=True)
+            try:
+                context = await browser.new_context(viewport={"width": 1280, "height": 800},
+                    user_agent=USER_AGENT, service_workers="block")
+                async def route_request(route):
+                    target = urlparse(route.request.url)
+                    if (target.scheme != "https" or target.hostname != base_host
+                            or target.port not in (None, 443)
+                            or route.request.resource_type in {"image", "media", "font"}):
+                        await route.abort()
+                    else:
+                        await route.continue_()
+                await context.route("**/*", route_request)
+                page = await context.new_page()
+                robots_url = f"https://{base_host}/robots.txt"
+                robots = RobotFileParser(robots_url)
                 try:
-                    await page.goto(current, wait_until="domcontentloaded", timeout=20000)
-                    html = await page.content()
-                    data = await asyncio.to_thread(extract, visible_text(html), current, request.user_goal)
-                    if data:
-                        data.update(source_url=current, scraped_at=datetime.now(timezone.utc).isoformat())
-                        records.append(data)
-                    if depth < request.max_depth:
-                        soup = BeautifulSoup(html, "html.parser")
-                        for tag in soup.find_all("a", href=True):
-                            target = urljoin(current, tag["href"])
-                            parsed = urlparse(target)
-                            if parsed.scheme == "https" and parsed.hostname == base_host and target not in visited:
-                                queue.append((target, depth + 1))
-                except Exception:
-                    continue
-        finally:
-            await browser.close()
-    return {"visited": len(visited), "records": records}
-
+                    response = await page.goto(robots_url, wait_until="domcontentloaded", timeout=12000)
+                    if response is None:
+                        raise HTTPException(503, "Robots policy unavailable")
+                    if response.status in (404, 410):
+                        robots.parse(["User-agent: *", "Disallow:"])
+                    elif response.ok:
+                        robots.parse((await response.text()).splitlines())
+                    else:
+                        raise HTTPException(503, "Robots policy unavailable or access restricted")
+                except HTTPException:
+                    raise
+                except Exception as exc:
+                    raise HTTPException(503, "Robots policy unavailable") from exc
+                while queue and len(visited) < MAX_PAGES:
+                    current, depth = queue.pop(0)
+                    if current in visited or depth > request.max_depth:
+                        continue
+                    current = await asyncio.to_thread(public_https_url, current)
+                    visited.add(current)
+                    if not robots.can_fetch(USER_AGENT, current):
+                        errors.append({"url": current, "reason": "robots_disallowed"})
+                        continue
+                    try:
+                        response = await page.goto(current, wait_until="domcontentloaded", timeout=20000)
+                        if response is None or not response.ok or not robots.can_fetch(USER_AGENT, page.url):
+                            errors.append({"url": current, "reason": "source_unavailable_or_restricted"})
+                            continue
+                        html = await page.content()
+                        data = extract(visible_text(html), current, request.user_goal)
+                        if data:
+                            data.update(source_url=page.url, scraped_at=datetime.now(timezone.utc).isoformat())
+                            records.append(data)
+                        if depth < request.max_depth:
+                            soup = BeautifulSoup(html, "html.parser")
+                            for tag in soup.find_all("a", href=True, limit=100):
+                                target = urljoin(page.url, tag["href"])
+                                parsed = urlparse(target)
+                                if parsed.scheme == "https" and parsed.hostname == base_host and target not in visited:
+                                    if len(queue) < 20:
+                                        queue.append((target, depth + 1))
+                    except Exception:
+                        errors.append({"url": current, "reason": "read_failed"})
+            finally:
+                await browser.close()
+    return {"visited": len(visited), "records": records, "errors": errors,
+            "mode": "free_raw_text", "structured_data_verified": False, "paid_api_used": False}
 
 @app.post("/collect.csv", dependencies=[Depends(require_token)])
 async def collect_csv(request: CollectRequest):
