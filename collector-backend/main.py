@@ -1,11 +1,12 @@
 """Private API for the Underdogs FUZJA collector.
 
 The service accepts only public HTTPS pages, extracts visible text with
-Playwright, asks OpenAI for structured data, and returns JSON or CSV.
+Playwright, parses explicit sports markup locally, and returns JSON or CSV.
 """
 import asyncio
 import csv
 import io
+import json
 import ipaddress
 import hmac
 import os
@@ -15,6 +16,7 @@ from urllib.parse import urljoin, urlparse
 from urllib.robotparser import RobotFileParser
 
 from bs4 import BeautifulSoup
+from free_parser import parse_public_html
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi.responses import Response
 from playwright.async_api import async_playwright
@@ -51,7 +53,7 @@ def public_https_url(raw_url: str) -> str:
             if not ip.is_global:
                 raise HTTPException(status_code=400, detail="Private network targets are blocked")
     except socket.gaierror as exc:
-        raise HTTPException(status_code=400, detail="Host cannot be resolved") from exc
+        raise HTTPException(status_code=503, detail="DNS resolution failed; retry later") from exc
     return raw_url
 
 
@@ -71,7 +73,7 @@ def extract(text: str, url: str, goal: str) -> dict:
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "model": None, "mode": "free_raw_text",
+    return {"status": "ok", "model": None, "mode": "free_structured_markup",
             "paid_api_used": False, "time": datetime.now(timezone.utc).isoformat()}
 
 @app.post("/collect", dependencies=[Depends(require_token)])
@@ -127,7 +129,9 @@ async def collect(request: CollectRequest):
                             continue
                         html = await page.content()
                         data = extract(visible_text(html), current, request.user_goal)
-                        if data:
+                        parsed = parse_public_html(html, page.url)
+                        data.update(parsed)
+                        if data.get("visible_text") or data["events"] or data["tables"]:
                             data.update(source_url=page.url, scraped_at=datetime.now(timezone.utc).isoformat())
                             records.append(data)
                         if depth < request.max_depth:
@@ -153,5 +157,5 @@ async def collect_csv(request: CollectRequest):
     stream = io.StringIO()
     writer = csv.DictWriter(stream, fieldnames=fields)
     writer.writeheader()
-    writer.writerows(rows)
+    writer.writerows([{k: json.dumps(v, ensure_ascii=False) if isinstance(v, (list, dict)) else v for k, v in row.items()} for row in rows])
     return Response(stream.getvalue(), media_type="text/csv; charset=utf-8")
